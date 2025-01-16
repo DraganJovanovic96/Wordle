@@ -1,0 +1,216 @@
+package com.wordle.service.impl;
+
+import com.wordle.dto.*;
+import com.wordle.enumeration.CharacterValue;
+import com.wordle.enumeration.GameStatus;
+import com.wordle.mapper.GameMapper;
+import com.wordle.mapper.GameOverMapper;
+import com.wordle.model.Game;
+import com.wordle.model.GuessedWord;
+import com.wordle.model.Player;
+import com.wordle.model.SecondaryWord;
+import com.wordle.repository.*;
+import com.wordle.service.GameService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.text.DecimalFormat;
+import java.util.*;
+
+@Service
+@RequiredArgsConstructor
+public class GameServiceImpl implements GameService {
+
+    private final GameRepository gameRepository;
+
+    private final PlayerRepository playerRepository;
+
+    private final PrimaryWordRepository primaryWordRepository;
+
+    private final SecondaryWordRepository secondaryWordRepository;
+
+    private final GuessedWordRepository guessedWordRepository;
+
+    private final GameMapper gameMapper;
+
+    private final GameOverMapper gameOverMapper;
+
+    @Override
+    public GameDto createGame(PlayerIdDto playerIdDto) {
+        Player player;
+
+        if (!Objects.nonNull(playerIdDto.getPlayerId())) {
+            player = new Player();
+            playerRepository.save(player);
+
+            playerIdDto.setPlayerId(player.getId());
+        } else {
+            player = playerRepository.findOneById(playerIdDto.getPlayerId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Player with this ID doesn't exist"));
+        }
+
+        Optional<Game> gameOptional = gameRepository.findOneByPlayerIdAndGameStatus(playerIdDto.getPlayerId(), GameStatus.IN_PROGRESS);
+
+        if (gameOptional.isPresent()) {
+
+            return gameMapper.gameToGameDto(gameOptional.get());
+        } else {
+            Game game = new Game();
+            game.setGameStatus(GameStatus.IN_PROGRESS);
+            game.setPlayer(player);
+            game.setNumberOfTries(0);
+            game.setCorrectWord(primaryWordRepository.findRandomWord());
+            gameRepository.save(game);
+
+            return gameMapper.gameToGameDto(game);
+        }
+    }
+
+    @Override
+    public GameResponse submitGuess(SubmitGuessDto submitGuessDto) {
+
+        if (submitGuessDto.getGuessedWord().length() != 5) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ("Word is not 5 characters long"));
+        }
+
+        if (!Objects.nonNull(submitGuessDto.getPlayerId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ("User can not be null"));
+        }
+
+        playerRepository.findById(submitGuessDto.getPlayerId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, ("Player not found ")));
+
+        Game game = gameRepository.findOneByPlayerIdAndGameStatus(submitGuessDto.getPlayerId(), GameStatus.IN_PROGRESS)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, ("Game not found ")));
+
+        SecondaryWord secondaryWord = secondaryWordRepository.findByStringOfWord(submitGuessDto.getGuessedWord())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Word not found"));
+
+        if (game.getGuessedWords().stream().anyMatch(gw -> gw.getGuessedWord().equals(secondaryWord))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This word was already submitted");
+        }
+
+        Map<Integer, CharacterValue> characterValueMap = checkCharacterValue(game.getCorrectWord().getStringOfWord(), submitGuessDto.getGuessedWord());
+
+        if (checkGameStatus(game, submitGuessDto.getGuessedWord(), secondaryWord, characterValueMap)) {
+            return gameOverMapper.gameToGameOverDto(game);
+        }
+
+        System.out.println(game.getCorrectWord().getStringOfWord());
+
+        game.setNumberOfTries(game.getNumberOfTries() + 1);
+
+        setGuessedWords(game, secondaryWord, characterValueMap);
+
+        return gameMapper.gameToGameDto(game);
+    }
+
+    @Override
+    public Map<Integer, CharacterValue> checkCharacterValue(String primaryWord, String secondaryWord) {
+        Map<Integer, CharacterValue> positionToCharacterValueMap = new HashMap<>();
+        Map<Character, Integer> correctWordCharacterFrequencyMap = new LinkedHashMap<>();
+
+        primaryWord = primaryWord.toLowerCase();
+        secondaryWord = secondaryWord.toLowerCase();
+
+        for (int i = 0; i < primaryWord.length(); i++) {
+            if (correctWordCharacterFrequencyMap.get(primaryWord.charAt(i)) == null) {
+                correctWordCharacterFrequencyMap.put(primaryWord.charAt(i), 1);
+            } else {
+                correctWordCharacterFrequencyMap.put(primaryWord.charAt(i), correctWordCharacterFrequencyMap.get(primaryWord.charAt(i)) + 1);
+            }
+        }
+
+        if (primaryWord.equalsIgnoreCase(secondaryWord)) {
+            for (int i = 0; i < secondaryWord.length(); i++) {
+                positionToCharacterValueMap.put(i, CharacterValue.CORRECT);
+                correctWordCharacterFrequencyMap.put(secondaryWord.charAt(i), correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) - 1);
+            }
+            positionToCharacterValueMap.forEach((position, characterValue) -> {
+                System.out.println("Position: " + position + ", Character Value: " + characterValue);
+            });
+            return positionToCharacterValueMap;
+        }
+
+        for (int i = 0; i < secondaryWord.length(); i++) {
+            if (secondaryWord.charAt(i) == primaryWord.charAt(i)) {
+                if (correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) != null && correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) > 0) {
+                    positionToCharacterValueMap.put(i, CharacterValue.CORRECT);
+                    correctWordCharacterFrequencyMap.put(secondaryWord.charAt(i), correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) - 1);
+                } else {
+                    positionToCharacterValueMap.put(i, CharacterValue.NOT_PRESENT);
+                }
+            }
+        }
+
+        for (int i = 0; i < secondaryWord.length(); i++) {
+
+            if (primaryWord.contains(String.valueOf(secondaryWord.charAt(i)))) {
+                if (correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) != null && correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) > 0) {
+                    positionToCharacterValueMap.put(i, CharacterValue.PRESENT_BUT_MISPLACED);
+                    correctWordCharacterFrequencyMap.put(secondaryWord.charAt(i), correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) - 1);
+                } else positionToCharacterValueMap.putIfAbsent(i, CharacterValue.NOT_PRESENT);
+            } else {
+                positionToCharacterValueMap.put(i, CharacterValue.NOT_PRESENT);
+            }
+        }
+        positionToCharacterValueMap.forEach((position, characterValue) -> {
+            System.out.println("Position: " + position + ", Character Value: " + characterValue);
+        });
+        return positionToCharacterValueMap;
+    }
+
+    public WinRateDto winRate(UUID playerId) {
+        long wins = gameRepository.countByPlayerIdAndGameStatus(playerId, GameStatus.WIN);
+        long losses = gameRepository.countByPlayerIdAndGameStatus(playerId, GameStatus.LOSE);
+        long totalGames = wins + losses;
+
+        double winRate = (totalGames == 0) ? 0.0 : ((double) wins / totalGames) * 100;
+
+        DecimalFormat df = new DecimalFormat("#.##");
+        winRate = Double.parseDouble(df.format(winRate));
+
+        WinRateDto winRateDto = new WinRateDto();
+        winRateDto.setNumberOfWins(wins);
+        winRateDto.setNumberOfLoses(losses);
+        winRateDto.setWinRate(winRate);
+
+        return winRateDto;
+    }
+
+    public Boolean checkGameStatus(Game game, String guessedWord, SecondaryWord secondaryWord, Map<Integer, CharacterValue> characterValueMap) {
+        if (game.getNumberOfTries() == 5 && !game.getCorrectWord().getStringOfWord().equals(guessedWord)) {
+            game.setGameStatus(GameStatus.LOSE);
+            game.setNumberOfTries(6);
+            setGuessedWords(game, secondaryWord, characterValueMap);
+            gameRepository.save(game);
+
+            return true;
+        }
+
+        if (game.getGameStatus().equals(GameStatus.IN_PROGRESS) && game.getCorrectWord().getStringOfWord().equals(guessedWord)) {
+            game.setGameStatus(GameStatus.WIN);
+            game.setNumberOfTries(game.getNumberOfTries() + 1);
+            setGuessedWords(game, secondaryWord, characterValueMap);
+            gameRepository.save(game);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private void setGuessedWords(Game game, SecondaryWord secondaryWord, Map<Integer, CharacterValue> characterValueMap) {
+        GuessedWord guessedWord = new GuessedWord();
+        guessedWord.setGame(game);
+        guessedWord.setGuessedWord(secondaryWord);
+        guessedWord.setCharacters(characterValueMap);
+
+        game.getGuessedWords().add(guessedWord);
+
+        guessedWordRepository.save(guessedWord);
+    }
+
+}
