@@ -85,7 +85,7 @@ public class GameServiceImpl implements GameService {
         Game game = gameRepository.findOneByPlayerIdAndGameStatus(submitGuessDto.getPlayerId(), GameStatus.IN_PROGRESS)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, ("Game not found ")));
 
-        SecondaryWord secondaryWord = secondaryWordRepository.findByStringOfWord(submitGuessDto.getGuessedWord())
+        SecondaryWord secondaryWord = secondaryWordRepository.findByStringOfWordIgnoreCase(submitGuessDto.getGuessedWord())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Word not found"));
 
         if (game.getGuessedWords().stream().anyMatch(gw -> gw.getGuessedWord().equals(secondaryWord))) {
@@ -97,8 +97,6 @@ public class GameServiceImpl implements GameService {
         if (checkGameStatus(game, submitGuessDto.getGuessedWord(), secondaryWord, characterValueMap)) {
             return gameOverMapper.gameToGameOverDto(game);
         }
-
-        System.out.println(game.getCorrectWord().getStringOfWord());
 
         game.setNumberOfTries(game.getNumberOfTries() + 1);
 
@@ -129,7 +127,6 @@ public class GameServiceImpl implements GameService {
                 correctWordCharacterFrequencyMap.put(secondaryWord.charAt(i), correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) - 1);
             }
             positionToCharacterValueMap.forEach((position, characterValue) -> {
-                System.out.println("Position: " + position + ", Character Value: " + characterValue);
             });
             return positionToCharacterValueMap;
         }
@@ -157,7 +154,6 @@ public class GameServiceImpl implements GameService {
             }
         }
         positionToCharacterValueMap.forEach((position, characterValue) -> {
-            System.out.println("Position: " + position + ", Character Value: " + characterValue);
         });
         return positionToCharacterValueMap;
     }
@@ -181,7 +177,7 @@ public class GameServiceImpl implements GameService {
     }
 
     public Boolean checkGameStatus(Game game, String guessedWord, SecondaryWord secondaryWord, Map<Integer, CharacterValue> characterValueMap) {
-        if (game.getNumberOfTries() == 5 && !game.getCorrectWord().getStringOfWord().equals(guessedWord)) {
+        if (game.getNumberOfTries() == 5 && !game.getCorrectWord().getStringOfWord().equalsIgnoreCase(guessedWord)) {
             game.setGameStatus(GameStatus.LOSE);
             game.setNumberOfTries(6);
             setGuessedWords(game, secondaryWord, characterValueMap);
@@ -190,7 +186,7 @@ public class GameServiceImpl implements GameService {
             return true;
         }
 
-        if (game.getGameStatus().equals(GameStatus.IN_PROGRESS) && game.getCorrectWord().getStringOfWord().equals(guessedWord)) {
+        if (game.getGameStatus().equals(GameStatus.IN_PROGRESS) && game.getCorrectWord().getStringOfWord().equalsIgnoreCase(guessedWord)) {
             game.setGameStatus(GameStatus.WIN);
             game.setNumberOfTries(game.getNumberOfTries() + 1);
             setGuessedWords(game, secondaryWord, characterValueMap);

@@ -10,5 +10,5 @@ import java.util.UUID;
 @Repository
 public interface SecondaryWordRepository extends JpaRepository<SecondaryWord, UUID> {
 
-    Optional<SecondaryWord> findByStringOfWord(String stringOfWord);
+    Optional<SecondaryWord> findByStringOfWordIgnoreCase(String stringOfWord);
 }
