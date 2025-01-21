@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.*;
 public class GameController {
     private final GameService gameService;
 
-    @GetMapping(value = "/start",produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/start", produces = MediaType.APPLICATION_JSON_VALUE)
     @ApiOperation(value = "Start a game")
     @ApiResponses(value = {
             @ApiResponse(code = 200, message = "Game successfully started.", response = GameDto.class)
