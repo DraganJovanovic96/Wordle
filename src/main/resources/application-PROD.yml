@@ -6,13 +6,6 @@ spring:
     driver-class-name: org.postgresql.Driver
   frontend:
     url: ${FRONTEND_URL}
-  oauth2:
-    resourceserver:
-      opaquetoken:
-        introspection-uri: https://oauth2.googleapis.com/tokeninfo
-      jwt:
-        issuer-uri: https://accounts.google.com
-        jwk-set-uri: https://www.googleapis.com/oauth2/v3/certs
   jpa:
     hibernate:
       ddl-auto: update
@@ -30,22 +23,6 @@ spring:
     baseline-version: 0
     locations: classpath:db/migration
 
-  mail:
-    host: smtp.gmail.com
-    port: 587
-    username: ${email}
-    password: ${email-password}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
 
 application:
-  security:
-    jwt:
-      secret-key: ${secret-key}
-      expiration: 86400000 # a day
-      refresh-token:
-        expiration: 604800000 # 7 days
+
