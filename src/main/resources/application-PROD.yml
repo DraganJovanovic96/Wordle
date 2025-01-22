@@ -1,0 +1,28 @@
+spring:
+  datasource:
+    url: ${DATASOURCE_URL}
+    username: ${username}
+    password: ${password}
+    driver-class-name: org.postgresql.Driver
+  frontend:
+    url: ${FRONTEND_URL}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+    database: postgresql
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+  flyway:
+    validate-on-migrate: true
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
+
+
+application:
+
