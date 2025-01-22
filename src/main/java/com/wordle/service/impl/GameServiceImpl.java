@@ -109,52 +109,44 @@ public class GameServiceImpl implements GameService {
     public Map<Integer, CharacterValue> checkCharacterValue(String primaryWord, String secondaryWord) {
         Map<Integer, CharacterValue> positionToCharacterValueMap = new HashMap<>();
         Map<Character, Integer> correctWordCharacterFrequencyMap = new LinkedHashMap<>();
+        Set<Integer> processedPositions = new HashSet<>(); // Track positions already processed
 
         primaryWord = primaryWord.toLowerCase();
         secondaryWord = secondaryWord.toLowerCase();
 
+        // Build frequency map for characters in the primary word
         for (int i = 0; i < primaryWord.length(); i++) {
-            if (correctWordCharacterFrequencyMap.get(primaryWord.charAt(i)) == null) {
-                correctWordCharacterFrequencyMap.put(primaryWord.charAt(i), 1);
-            } else {
-                correctWordCharacterFrequencyMap.put(primaryWord.charAt(i), correctWordCharacterFrequencyMap.get(primaryWord.charAt(i)) + 1);
-            }
+            correctWordCharacterFrequencyMap.put(primaryWord.charAt(i),
+                    correctWordCharacterFrequencyMap.getOrDefault(primaryWord.charAt(i), 0) + 1);
         }
 
-        if (primaryWord.equalsIgnoreCase(secondaryWord)) {
-            for (int i = 0; i < secondaryWord.length(); i++) {
-                positionToCharacterValueMap.put(i, CharacterValue.CORRECT);
-                correctWordCharacterFrequencyMap.put(secondaryWord.charAt(i), correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) - 1);
-            }
-            positionToCharacterValueMap.forEach((position, characterValue) -> {
-            });
-            return positionToCharacterValueMap;
-        }
-
+        // First pass: Check for CORRECT matches
         for (int i = 0; i < secondaryWord.length(); i++) {
             if (secondaryWord.charAt(i) == primaryWord.charAt(i)) {
-                if (correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) != null && correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) > 0) {
-                    positionToCharacterValueMap.put(i, CharacterValue.CORRECT);
-                    correctWordCharacterFrequencyMap.put(secondaryWord.charAt(i), correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) - 1);
-                } else {
-                    positionToCharacterValueMap.put(i, CharacterValue.NOT_PRESENT);
-                }
+                positionToCharacterValueMap.put(i, CharacterValue.CORRECT);
+                processedPositions.add(i); // Mark position as processed
+                correctWordCharacterFrequencyMap.put(primaryWord.charAt(i),
+                        correctWordCharacterFrequencyMap.get(primaryWord.charAt(i)) - 1);
             }
         }
 
+        // Second pass: Check for PRESENT_BUT_MISPLACED matches
         for (int i = 0; i < secondaryWord.length(); i++) {
+            if (processedPositions.contains(i)) {
+                continue; // Skip already processed positions
+            }
 
-            if (primaryWord.contains(String.valueOf(secondaryWord.charAt(i)))) {
-                if (correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) != null && correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) > 0) {
-                    positionToCharacterValueMap.put(i, CharacterValue.PRESENT_BUT_MISPLACED);
-                    correctWordCharacterFrequencyMap.put(secondaryWord.charAt(i), correctWordCharacterFrequencyMap.get(secondaryWord.charAt(i)) - 1);
-                } else positionToCharacterValueMap.putIfAbsent(i, CharacterValue.NOT_PRESENT);
+            char currentChar = secondaryWord.charAt(i);
+            if (primaryWord.contains(String.valueOf(currentChar)) &&
+                    correctWordCharacterFrequencyMap.getOrDefault(currentChar, 0) > 0) {
+                positionToCharacterValueMap.put(i, CharacterValue.PRESENT_BUT_MISPLACED);
+                correctWordCharacterFrequencyMap.put(currentChar,
+                        correctWordCharacterFrequencyMap.get(currentChar) - 1);
             } else {
                 positionToCharacterValueMap.put(i, CharacterValue.NOT_PRESENT);
             }
         }
-        positionToCharacterValueMap.forEach((position, characterValue) -> {
-        });
+
         return positionToCharacterValueMap;
     }
 
